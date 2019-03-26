@@ -2,7 +2,9 @@
 
 ![](all_titanic.png)
 
-Author's note: Deep learning may be overkill for a small dataset like the Titanic dataset, but it's good for benchmarking.
+Dataset used: http://web.stanford.edu/class/archive/cs/cs109/cs109.1166/problem12.html
+
+Author's note: Deep learning may be overkill or even less effective for a small dataset like the Titanic dataset, but it's good for benchmarking.
 
 ```
 Modeling with field specifications:

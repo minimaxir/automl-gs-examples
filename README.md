@@ -4,7 +4,7 @@ A repo of [automl-gs](https://github.com/minimaxir/automl-gs) examples trained o
 
 Examples will be added over time!
 
-*Note*: Because the full training results can be very large, the results in this repo only show the final epoch for each trial, and the repos will not contain the resulting model.
+*Note*: Because the full training results can be very large, the results in this repo for each dataset only show the final epoch for each trial, and the repos may not contain the resulting model.
 
 ## Example Datasets
 
