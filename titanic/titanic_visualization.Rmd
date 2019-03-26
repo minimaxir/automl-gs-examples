@@ -1,0 +1,233 @@
+---
+title: "Visualizating the Titanic Model Training with automl-gs"
+author: "Max Woolf (@minimaxir)"
+date: "2019-03-25"
+output:
+  html_notebook:
+    highlight: tango
+    mathjax: null
+    number_sections: yes
+    theme: spacelab
+    toc: True
+---
+
+This notebook is licensed under the MIT License. If you use the code or data visualization designs contained within this notebook, it would be greatly appreciated if proper attribution is given back to this notebook and/or myself. Thanks! :)
+
+```{r}
+library(tidyverse)
+library(scales)
+library(ggpubr)
+
+sessionInfo()
+```
+
+```{r}
+theme_set(theme_minimal(base_size=9, base_family="Source Sans Pro") +
+            theme(plot.title = element_text(family="Source Sans Pro Bold", margin=margin(t = -0.1, b = 0.1, unit='cm')),
+                  axis.title.x = element_text(),
+                  axis.title.y = element_text(),
+                  axis.text.y = element_text(family="Roboto Condensed"),
+                  axis.text.x = element_text(family="Roboto Condensed"),
+                  plot.subtitle = element_text(family="Source Sans Pro Semibold", color="#969696"),
+                  plot.caption = element_text(color="#969696"),
+                  legend.title = element_text(),
+                  legend.key.width = unit(0.25, unit='cm')))
+```
+
+
+```{r}
+frameworks <- c('tensorflow', 'xgboost')
+
+read_mut <- function(x) {
+  read_csv(paste0(x, "/automl_results.csv")) %>% mutate(framework=x)
+}
+
+df <- frameworks %>%
+        map_dfr(read_mut)
+
+df_end_train <- df %>% 
+                  filter(epoch == max(epoch)) %>%
+                  group_by(framework) %>%
+                  arrange(time_completed) %>%
+                  mutate(trial_no = row_number(),
+                         cumbest = cummax(accuracy))
+
+df_end_train %>% head(10)
+write.csv(df_end_train, 'titanic_training.csv', row.names=F, na='')
+```
+
+## Plot *ALL* The Trials!
+
+```{r}
+plot <- ggplot(df, aes(x=epoch, y=accuracy, color=framework, group=trial_id)) +
+  geom_line(stat="identity", alpha=0.025) +
+  scale_color_brewer(palette="Set1", guide=F) +
+  scale_x_continuous(breaks=c(1, 5, 10, 15, 20)) +
+  scale_y_continuous(labels=percent_format(accuracy=1)) +
+  facet_wrap(~ framework, ncol=2) +
+  labs(title="Training a Model to Predict Titanic Survivors w/ automl-gs",
+       subtitle="1,000 Trials for each framework. Higher accuracy is better.",
+       x="# Epoch of Trial",
+       y="Prediction Accuracy on Validation Set at Epoch",
+       color="Framework",
+       caption = "Max Woolf — minimaxir.com")
+  # theme(legend.position = 'top',
+  #       legend.title = element_text(size = 6),
+  #       legend.text = element_text(size = 5),
+  #       legend.key.width = unit(1, unit='cm'),
+  #       legend.key.height = unit(0.25, unit='cm'),
+  #       legend.margin = margin(c(0, 0, -0.4, 0), unit='cm'),
+  # )
+
+ggsave('all_titanic.png', plot, width=5, height=3)
+```
+
+## Winning Framework at *n*th Trial
+
+(Commented out since there wasn't much variability)
+
+```{r}
+# plot <- ggplot(df_end_train, aes(x=trial_no, y=cumbest, color=framework)) +
+#   geom_line(stat="identity", alpha=0.5, size=0.5) +
+#   scale_color_brewer(palette="Set1") +
+#   scale_x_continuous() +
+#   scale_y_continuous(limits=c(0.6, 1), labels=percent_format(precision=1)) +
+#   labs(title="Winning Framework at nth Trial While Training w/ automl-gs",
+#        x="nth trial",
+#        y="Best Cum. Accuracy on Val Set",
+#        color="Framework",
+#        caption = "Max Woolf — minimaxir.com") +
+#   theme(legend.position = 'top',
+#         legend.title = element_text(size = 6),
+#         legend.text = element_text(size = 5),
+#         legend.key.width = unit(1, unit='cm'),
+#         legend.key.height = unit(0.25, unit='cm'),
+#         legend.margin = margin(c(0, 0, -0.4, 0), unit='cm'),
+#   )
+# 
+# ggsave('cumbest_titanic.png', plot, width=4, height=3)
+```
+
+## Hyperparameter Faceting
+
+### TensorFlow
+
+```{r}
+df_tensorflow_hps <- read_csv("tensorflow/automl_results.csv") %>%
+                      select(-trial_id,
+                             -time_completed,
+                             -log_loss,
+                             -auc,
+                             -precision,
+                             -recall,
+                             -f1)
+```
+
+Plot test case by grouping on learning rate.
+
+```{r}
+theme_set(theme_minimal(base_size=4, base_family="Source Sans Pro") +
+            theme(plot.title = element_text(family="Source Sans Pro Bold", hjust=0.5),
+                  axis.title.x = element_text(),
+                  axis.title.y = element_text(),
+                  axis.text.y = element_text(family="Roboto Condensed"),
+                  axis.text.x = element_text(family="Roboto Condensed"),
+                  plot.subtitle = element_text(family="Source Sans Pro Semibold", color="#969696"),
+                  plot.caption = element_text(color="#969696"),
+                  legend.title = element_text(),
+                  legend.key.width = unit(0.25, unit='cm')))
+```
+
+Plot a single hyperparameter spread to test.
+
+```{r}
+df_hp_agg <- df_tensorflow_hps %>%
+              mutate(base_lr = factor(base_lr)) %>%
+              group_by(epoch, base_lr) %>%
+              summarize(low_ci = quantile(accuracy, 0.25),
+                        med = quantile(accuracy, 0.50),
+                        high_ci = quantile(accuracy, 0.75))
+
+
+plot <- ggplot(df_hp_agg, aes(x=epoch, color=base_lr, fill=base_lr)) +
+  geom_ribbon(aes(ymin = low_ci, ymax = high_ci), stat="identity", alpha=0.2, size=0) +
+  geom_line(aes(y=med), stat="identity") +
+  scale_color_brewer(palette="Set1") +
+  scale_fill_brewer(palette="Set1") +
+  scale_x_continuous(breaks=c(1, 5, 10, 15, 20)) +
+  scale_y_continuous(labels=percent_format(accuracy=1)) +
+  labs(title="base_lr",
+       fill='',
+       color='') +
+  theme(legend.position = 'top',
+        # legend.title = element_text(size = 6),
+        # legend.text = element_text(size = 5),
+        # legend.key.width = unit(1, unit='cm'),
+        legend.key.height = unit(0.25, unit='cm'),
+        legend.margin = margin(c(0, 0, -0.2, 0), unit='cm'),
+        axis.title.x = element_blank(),
+        axis.title.y = element_blank()
+  )
+
+ggsave('hp_test.png', plot, width=1.5, height=1.5)
+```
+
+```{r}
+hps <- names(df_tensorflow_hps)[-(1:2)]
+hps
+```
+
+Create a function to automate chart creation. (`parse_quo` usage via [Stack Overflow](https://stackoverflow.com/questions/49469982/r-using-a-string-as-an-argument-to-mutate-verb-in-dplyr))
+
+```{r}
+hp_graph <- function(hp_name, df_hp, framework) {
+  
+hp_quosure <- rlang::parse_quo(hp_name, env = rlang::caller_env())
+
+df_hp_agg <- df_hp %>%
+              mutate(base_lr = factor(!!hp_quosure)) %>%
+              group_by(epoch, !!hp_quosure) %>%
+              summarize(low_ci = quantile(accuracy, 0.25),
+                        med = quantile(accuracy, 0.50),
+                        high_ci = quantile(accuracy, 0.75))
+
+
+plot <- ggplot(df_hp_agg, aes(x=epoch, color=!!hp_quosure, fill=!!hp_quosure)) +
+  geom_ribbon(aes(ymin = low_ci, ymax = high_ci), stat="identity", alpha=0.2, size=0) +
+  geom_line(aes(y=med), stat="identity") +
+  scale_color_brewer(palette="Set1") +
+  scale_fill_brewer(palette="Set1") +
+  scale_x_continuous(breaks=c(1, 5, 10, 15, 20)) +
+  scale_y_continuous(labels=percent_format(accuracy=1),  limits=c(0.5, 0.8)) +
+  labs(title=hp_name,
+       fill='',
+       color='') +
+  theme(legend.position = 'top',
+        legend.key.height = unit(0.25, unit='cm'),
+        legend.margin = margin(c(0, 0, -0.2, 0), unit='cm'),
+        axis.title.x = element_blank(),
+        axis.title.y = element_blank()
+  )
+
+  ggsave(paste0('hyperparams/', framework, '_', hp_name, '.png'), plot, width=1.5, height=1.5)
+}
+
+plot <- hp_graph("numeric_strat", df_tensorflow_hps, "tensorflow")
+```
+
+Generate a plot for each hyperparameter.
+
+```{r}
+map(hps, hp_graph, df_tensorflow_hps, "tensorflow")
+```
+
+
+# MIT License
+
+Copyright (c) 2019 Max Woolf
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
