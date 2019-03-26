@@ -1,0 +1,4 @@
+scikit-learn
+pandas
+tensorflow >= 1.12
+hdf5

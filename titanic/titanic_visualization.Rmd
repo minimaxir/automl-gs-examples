@@ -16,7 +16,6 @@ This notebook is licensed under the MIT License. If you use the code or data vis
 ```{r}
 library(tidyverse)
 library(scales)
-library(ggpubr)
 
 sessionInfo()
 ```
@@ -80,32 +79,6 @@ plot <- ggplot(df, aes(x=epoch, y=accuracy, color=framework, group=trial_id)) +
   # )
 
 ggsave('all_titanic.png', plot, width=5, height=3)
-```
-
-## Winning Framework at *n*th Trial
-
-(Commented out since there wasn't much variability)
-
-```{r}
-# plot <- ggplot(df_end_train, aes(x=trial_no, y=cumbest, color=framework)) +
-#   geom_line(stat="identity", alpha=0.5, size=0.5) +
-#   scale_color_brewer(palette="Set1") +
-#   scale_x_continuous() +
-#   scale_y_continuous(limits=c(0.6, 1), labels=percent_format(precision=1)) +
-#   labs(title="Winning Framework at nth Trial While Training w/ automl-gs",
-#        x="nth trial",
-#        y="Best Cum. Accuracy on Val Set",
-#        color="Framework",
-#        caption = "Max Woolf — minimaxir.com") +
-#   theme(legend.position = 'top',
-#         legend.title = element_text(size = 6),
-#         legend.text = element_text(size = 5),
-#         legend.key.width = unit(1, unit='cm'),
-#         legend.key.height = unit(0.25, unit='cm'),
-#         legend.margin = margin(c(0, 0, -0.4, 0), unit='cm'),
-#   )
-# 
-# ggsave('cumbest_titanic.png', plot, width=4, height=3)
 ```
 
 ## Hyperparameter Faceting
@@ -185,20 +158,20 @@ hp_graph <- function(hp_name, df_hp, framework) {
 hp_quosure <- rlang::parse_quo(hp_name, env = rlang::caller_env())
 
 df_hp_agg <- df_hp %>%
-              mutate(base_lr = factor(!!hp_quosure)) %>%
-              group_by(epoch, !!hp_quosure) %>%
+              mutate(hp = factor(!!hp_quosure)) %>%
+              group_by(epoch, hp) %>%
               summarize(low_ci = quantile(accuracy, 0.25),
                         med = quantile(accuracy, 0.50),
                         high_ci = quantile(accuracy, 0.75))
 
 
-plot <- ggplot(df_hp_agg, aes(x=epoch, color=!!hp_quosure, fill=!!hp_quosure)) +
+plot <- ggplot(df_hp_agg, aes(x=epoch, color=hp, fill=hp)) +
   geom_ribbon(aes(ymin = low_ci, ymax = high_ci), stat="identity", alpha=0.2, size=0) +
   geom_line(aes(y=med), stat="identity") +
   scale_color_brewer(palette="Set1") +
   scale_fill_brewer(palette="Set1") +
   scale_x_continuous(breaks=c(1, 5, 10, 15, 20)) +
-  scale_y_continuous(labels=percent_format(accuracy=1),  limits=c(0.5, 0.8)) +
+  scale_y_continuous(labels=percent_format(accuracy=1),  limits=c(0.5, 0.85)) +
   labs(title=hp_name,
        fill='',
        color='') +
@@ -218,7 +191,24 @@ plot <- hp_graph("numeric_strat", df_tensorflow_hps, "tensorflow")
 Generate a plot for each hyperparameter.
 
 ```{r}
-map(hps, hp_graph, df_tensorflow_hps, "tensorflow")
+temp <- map(hps, hp_graph, df_tensorflow_hps, "tensorflow")
+```
+
+Do the same for xgboost.
+
+```{r}
+df_xgboost_hps <- read_csv("xgboost/automl_results.csv") %>%
+                      select(-trial_id,
+                             -time_completed,
+                             -log_loss,
+                             -auc,
+                             -precision,
+                             -recall,
+                             -f1)
+
+hps <- names(df_xgboost_hps)[-(1:2)]
+
+temp <- map(hps, hp_graph, df_xgboost_hps, "xgboost")
 ```
 
 
